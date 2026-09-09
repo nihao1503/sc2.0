@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { PACKAGE_LABEL } from '../lib/constants';
 
 function fmtDate(iso) {
@@ -41,7 +42,9 @@ export default function SupervisorAccountability({ activity }) {
         <tbody>
           {sorted.map(a => (
             <tr key={a.profile.id} className={a.flaggedCount > 0 ? 'st-halted' : (a.updatedToday ? 'st-active' : 'st-halted')}>
-              <td className="site-name">{a.profile.name}</td>
+              <td className="site-name">
+                <Link href={`/supervisor/${a.profile.id}`} style={{ color: 'var(--blue)' }}>{a.profile.name}</Link>
+              </td>
               <td>{PACKAGE_LABEL[a.profile.package] || a.profile.package}
                 <div className="site-meta">Zones: {(a.profile.zones || []).join(', ') || '—'}</div>
               </td>
