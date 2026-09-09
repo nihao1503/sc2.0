@@ -32,7 +32,7 @@ export default function Dashboard() {
 
     const { data: siteRows, error: sitesErr } = await supabase
       .from('sites')
-      .select('*, site_status(status, reason, note, updated_by, updated_at)')
+      .select('*, site_status(status, reason, note, updated_by, updated_at, photo_path, photo_lat, photo_lng, photo_accuracy_m, photo_taken_at)')
       .order('zone', { ascending: true });
 
     if (sitesErr) {
@@ -75,9 +75,12 @@ export default function Dashboard() {
     return latest;
   }, [isAdmin, sites]);
 
-  async function handleSave(siteId, { status, reason, note, updatedBy }) {
+  async function handleSave(siteId, { status, reason, note, updatedBy, photoPath, photoLat, photoLng, photoAccuracyM, photoTakenAt }) {
+    const nowIso = new Date().toISOString();
     const { error } = await supabase.from('site_status').upsert({
-      site_id: siteId, status, reason, note, updated_by: updatedBy, updated_at: new Date().toISOString(),
+      site_id: siteId, status, reason, note, updated_by: updatedBy, updated_at: nowIso,
+      photo_path: photoPath, photo_lat: photoLat, photo_lng: photoLng,
+      photo_accuracy_m: photoAccuracyM, photo_taken_at: photoTakenAt,
     });
     if (error) {
       setToast('Save failed: ' + error.message);
@@ -85,7 +88,13 @@ export default function Dashboard() {
       return;
     }
     setSites(prev => prev.map(s => s.id === siteId
-      ? { ...s, status: { status, reason, note, updated_by: updatedBy, updated_at: new Date().toISOString() } }
+      ? {
+          ...s, status: {
+            status, reason, note, updated_by: updatedBy, updated_at: nowIso,
+            photo_path: photoPath, photo_lat: photoLat, photo_lng: photoLng,
+            photo_accuracy_m: photoAccuracyM, photo_taken_at: photoTakenAt,
+          }
+        }
       : s));
     setToast('Status saved');
     setTimeout(() => setToast(''), 2500);
@@ -143,6 +152,7 @@ export default function Dashboard() {
           site={openSite}
           currentStatus={openSite.status}
           myName={profile?.name}
+          requirePhoto={!isAdmin}
           onClose={() => setOpenSite(null)}
           onSave={handleSave}
         />

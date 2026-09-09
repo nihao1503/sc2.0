@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { STATUS_LABEL, PACKAGE_LABEL } from '../lib/constants';
 import { isSiteOverdue, daysSince } from '../lib/accountability';
+import { getSignedPhotoUrl, mapsLink, checkLocationMismatch } from '../lib/photo';
 
 function fmtDate(iso) {
   if (!iso) return '—';
@@ -66,12 +67,12 @@ export default function PackageBoard({ pkg, sites, onOpenSite, showHeading = tru
   }, [sites, zoneFilter, statusFilter, search]);
 
   function exportCsv() {
-    const header = ['Zone', 'ZoneName', 'Ward', 'Site', 'Type', 'Category', 'Status', 'Reason', 'Note', 'UpdatedBy', 'UpdatedAt'];
+    const header = ['Zone', 'ZoneName', 'Ward', 'Site', 'Type', 'Category', 'Status', 'Reason', 'Note', 'UpdatedBy', 'UpdatedAt', 'PhotoLat', 'PhotoLng'];
     const lines = [header.join(',')];
     filtered.forEach(s => {
       const st = s.status || {};
       const vals = [s.zone, s.zone_name, s.ward, s.name, s.type, s.category,
-        STATUS_LABEL[st.status || 'unknown'], st.reason, st.note, st.updated_by, st.updated_at]
+        STATUS_LABEL[st.status || 'unknown'], st.reason, st.note, st.updated_by, st.updated_at, st.photo_lat, st.photo_lng]
         .map(v => '"' + String(v || '').replace(/"/g, '""') + '"');
       lines.push(vals.join(','));
     });
@@ -84,6 +85,17 @@ export default function PackageBoard({ pkg, sites, onOpenSite, showHeading = tru
   }
 
   const maxReason = reasonCounts.length ? reasonCounts[0][1] : 1;
+
+  async function viewProof(e, st) {
+    e.stopPropagation();
+    if (!st.photo_path) return;
+    try {
+      const url = await getSignedPhotoUrl(st.photo_path);
+      window.open(url, '_blank');
+    } catch (err) {
+      alert('Could not load photo: ' + (err.message || 'unknown error'));
+    }
+  }
 
   return (
     <div className="package-block">
@@ -161,13 +173,14 @@ export default function PackageBoard({ pkg, sites, onOpenSite, showHeading = tru
           <div className="table-scroll">
             <table className="reg">
               <thead>
-                <tr><th>Zone</th><th>Ward</th><th>Site</th><th>Work type</th><th>Status</th><th>Reason / note</th><th>Last updated</th></tr>
+                <tr><th>Zone</th><th>Ward</th><th>Site</th><th>Work type</th><th>Status</th><th>Reason / note</th><th>Proof</th><th>Last updated</th></tr>
               </thead>
               <tbody>
                 {filtered.map(s => {
                   const st = s.status || {};
                   const statusKey = st.status || 'unknown';
                   const overdue = isSiteOverdue(s);
+                  const mismatch = checkLocationMismatch(s, st.photo_lat, st.photo_lng);
                   const reasonOrNote = statusKey === 'halted'
                     ? (st.reason || '') + (st.note ? ' — ' + st.note : '')
                     : (st.note || '');
@@ -179,6 +192,16 @@ export default function PackageBoard({ pkg, sites, onOpenSite, showHeading = tru
                       <td>{s.type || '-'}<div className="site-meta">{s.category || ''}</div></td>
                       <td><span className={`badge ${statusKey}`}>{STATUS_LABEL[statusKey]}</span></td>
                       <td><span className="reason-txt">{reasonOrNote}</span></td>
+                      <td>
+                        {st.photo_path ? (
+                          <span className="edit-link" onClick={(e) => viewProof(e, st)}>📷 View</span>
+                        ) : <span className="site-meta">none</span>}
+                        {mismatch?.mismatch && (
+                          <div style={{ color: 'var(--amber)', fontSize: 11, fontWeight: 600 }}>
+                            ⚠ {Math.round(mismatch.distance)}m off
+                          </div>
+                        )}
+                      </td>
                       <td className="updated-meta" style={overdue ? { color: 'var(--amber)', fontWeight: 600 } : undefined}>
                         {overdue && '⚠ '}{st.updated_at ? fmtDate(st.updated_at) : 'never'}{st.updated_by ? <><br />by {st.updated_by}</> : null}
                       </td>

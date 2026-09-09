@@ -25,6 +25,8 @@ create table if not exists sites (
   name text not null,
   type text,
   category text,
+  lat double precision,
+  lng double precision,
   created_at timestamptz default now()
 );
 
@@ -35,7 +37,14 @@ create table if not exists site_status (
   reason text,
   note text,
   updated_by text,
-  updated_at timestamptz default now()
+  updated_at timestamptz default now(),
+  -- Geotagged photo proof: required on every update so a status change can't
+  -- be logged without visiting the site and taking a fresh photo there.
+  photo_path text,
+  photo_lat double precision,
+  photo_lng double precision,
+  photo_accuracy_m double precision,
+  photo_taken_at timestamptz
 );
 
 -- ============================================================
@@ -113,6 +122,41 @@ create policy "update status in scope" on site_status
 -- see their own profile (see "read own profile" above).
 create policy "admin read all profiles" on profiles
   for select using (is_admin());
+
+-- ============================================================
+-- Photo proof storage — a private bucket holding the geotagged photo that
+-- must accompany every status update. Files are stored as
+-- "<site_id>/<filename>" so access can be scoped the same way as everything
+-- else, by checking which zones the uploader/viewer is assigned to.
+-- ============================================================
+
+insert into storage.buckets (id, name, public)
+values ('site-photos', 'site-photos', false)
+on conflict (id) do nothing;
+
+create policy "read site photos in scope" on storage.objects
+  for select using (
+    bucket_id = 'site-photos' and (
+      is_admin() or exists (
+        select 1 from sites
+        where sites.id = (storage.foldername(name))[1]
+          and sites.package = my_package()
+          and sites.zone = any(my_zones())
+      )
+    )
+  );
+
+create policy "upload site photos in scope" on storage.objects
+  for insert with check (
+    bucket_id = 'site-photos' and (
+      is_admin() or exists (
+        select 1 from sites
+        where sites.id = (storage.foldername(name))[1]
+          and sites.package = my_package()
+          and sites.zone = any(my_zones())
+      )
+    )
+  );
 
 -- Admins can add/edit sites (e.g. to patch the Package 4 gaps). Supervisors cannot
 -- change the master list, only report status against it.

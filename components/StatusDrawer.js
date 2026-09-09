@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { HALT_REASONS } from '../lib/constants';
+import { getCurrentPosition, uploadSitePhoto, mapsLink, checkLocationMismatch } from '../lib/photo';
 
 function fmtDate(iso) {
   if (!iso) return 'never';
@@ -8,24 +9,96 @@ function fmtDate(iso) {
     ' ' + d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 }
 
-export default function StatusDrawer({ site, currentStatus, myName, onClose, onSave }) {
+export default function StatusDrawer({ site, currentStatus, myName, requirePhoto = true, onClose, onSave }) {
   const [status, setStatus] = useState(currentStatus?.status || 'unknown');
   const [reason, setReason] = useState(currentStatus?.reason || HALT_REASONS[0]);
   const [note, setNote] = useState(currentStatus?.note || '');
   const [updatedBy, setUpdatedBy] = useState(myName || '');
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState('');
+  const [location, setLocation] = useState(null);
+  const [locating, setLocating] = useState(false);
+  const [locationError, setLocationError] = useState('');
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     setStatus(currentStatus?.status || 'unknown');
     setReason(currentStatus?.reason || HALT_REASONS[0]);
     setNote(currentStatus?.note || '');
+    setPhotoFile(null);
+    setPhotoPreview('');
+    setLocation(null);
+    setLocationError('');
+    setSaveError('');
   }, [site, currentStatus]);
 
   if (!site) return null;
 
+  async function handlePhotoChange(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoFile(file);
+    setPhotoPreview(URL.createObjectURL(file));
+    setLocationError('');
+    setLocating(true);
+    try {
+      const pos = await getCurrentPosition();
+      setLocation(pos);
+    } catch (err) {
+      setLocation(null);
+      setLocationError(
+        err.code === 1
+          ? 'Location permission denied — please allow location access and try again.'
+          : 'Could not get location. Check your GPS/location is turned on and retry.'
+      );
+    }
+    setLocating(false);
+  }
+
+  function retryLocation() {
+    if (!photoFile) return;
+    setLocationError('');
+    setLocating(true);
+    getCurrentPosition()
+      .then(pos => { setLocation(pos); setLocating(false); })
+      .catch(err => {
+        setLocation(null);
+        setLocating(false);
+        setLocationError(err.code === 1
+          ? 'Location permission denied — please allow location access and try again.'
+          : 'Could not get location. Try again.');
+      });
+  }
+
+  const photoReady = !requirePhoto || (photoFile && location);
+  const canSave = status !== 'unknown' && photoReady && !locating;
+  const mismatch = location ? checkLocationMismatch(site, location.lat, location.lng) : null;
+
   async function handleSave() {
+    setSaveError('');
     setSaving(true);
-    await onSave(site.id, { status, reason: status === 'halted' ? reason : '', note, updatedBy });
+    try {
+      let photoPath = null;
+      if (photoFile) {
+        photoPath = await uploadSitePhoto(site.id, photoFile);
+      }
+      await onSave(site.id, {
+        status,
+        reason: status === 'halted' ? reason : '',
+        note,
+        updatedBy,
+        photoPath,
+        photoLat: location?.lat ?? null,
+        photoLng: location?.lng ?? null,
+        photoAccuracyM: location?.accuracy ?? null,
+        photoTakenAt: photoFile ? new Date().toISOString() : null,
+      });
+    } catch (err) {
+      setSaveError('Could not save: ' + (err.message || 'unknown error'));
+    }
     setSaving(false);
   }
 
@@ -64,11 +137,56 @@ export default function StatusDrawer({ site, currentStatus, myName, onClose, onS
           <input type="text" value={updatedBy} onChange={e => setUpdatedBy(e.target.value)} placeholder="Who's logging this update" />
         </div>
 
+        <div className="field">
+          <label>{requirePhoto ? 'Photo proof (required) — take it standing at the site' : 'Photo proof (optional)'}</label>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={handlePhotoChange}
+          />
+        </div>
+
+        {photoPreview && (
+          <div className="field">
+            <img src={photoPreview} alt="Site proof" style={{ width: '100%', borderRadius: 3, border: '1px solid var(--line)' }} />
+          </div>
+        )}
+
+        {locating && <p className="small-note">Getting your location…</p>}
+
+        {location && !locating && (
+          <p className="small-note">
+            📍 Location captured (±{Math.round(location.accuracy)}m) —{' '}
+            <a href={mapsLink(location.lat, location.lng)} target="_blank" rel="noreferrer">view on map</a>
+          </p>
+        )}
+
+        {mismatch?.mismatch && (
+          <div className="caveat" style={{ marginBottom: 14 }}>
+            ⚠ You're about {Math.round(mismatch.distance)}m from this site's registered location. Double-check you're at the right site before saving — this will be flagged for review either way.
+          </div>
+        )}
+
+        {locationError && (
+          <div className="caveat" style={{ marginBottom: 14 }}>
+            {locationError}{' '}
+            <span className="edit-link" onClick={retryLocation}>Retry</span>
+          </div>
+        )}
+
+        {requirePhoto && !photoFile && (
+          <p className="hint">A fresh photo with location is required to save — this is how updates get verified as taken on-site.</p>
+        )}
+
         <div className="hint">
           Last updated: {currentStatus?.updated_at ? `${fmtDate(currentStatus.updated_at)}${currentStatus.updated_by ? ' by ' + currentStatus.updated_by : ''}` : 'never'}
         </div>
 
-        <button className="btn" style={{ width: '100%' }} disabled={saving} onClick={handleSave}>
+        {saveError && <div className="caveat" style={{ marginBottom: 14 }}>{saveError}</div>}
+
+        <button className="btn" style={{ width: '100%' }} disabled={saving || !canSave} onClick={handleSave}>
           {saving ? 'Saving…' : 'Save update'}
         </button>
       </div>
