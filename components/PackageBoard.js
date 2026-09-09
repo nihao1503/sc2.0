@@ -201,6 +201,11 @@ export default function PackageBoard({ pkg, sites, onOpenSite, showHeading = tru
                             ⚠ {Math.round(mismatch.distance)}m off
                           </div>
                         )}
+                        {st.photo_path && st.photo_lat == null && (
+                          <div style={{ color: 'var(--amber)', fontSize: 11, fontWeight: 600 }}>
+                            ⚠ No location
+                          </div>
+                        )}
                       </td>
                       <td className="updated-meta" style={overdue ? { color: 'var(--amber)', fontWeight: 600 } : undefined}>
                         {overdue && '⚠ '}{st.updated_at ? fmtDate(st.updated_at) : 'never'}{st.updated_by ? <><br />by {st.updated_by}</> : null}

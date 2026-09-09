@@ -73,7 +73,7 @@ export default function StatusDrawer({ site, currentStatus, myName, requirePhoto
       });
   }
 
-  const photoReady = !requirePhoto || (photoFile && location);
+  const photoReady = !requirePhoto || photoFile;
   const canSave = status !== 'unknown' && photoReady && !locating;
   const mismatch = location ? checkLocationMismatch(site, location.lat, location.lng) : null;
 
@@ -165,19 +165,19 @@ export default function StatusDrawer({ site, currentStatus, myName, requirePhoto
 
         {mismatch?.mismatch && (
           <div className="caveat" style={{ marginBottom: 14 }}>
-            ⚠ You're about {Math.round(mismatch.distance)}m from this site's registered location. Double-check you're at the right site before saving — this will be flagged for review either way.
+            ⚠ You're about {Math.round(mismatch.distance)}m from this site's registered location. You can still save — this will be flagged for your admin to review.
           </div>
         )}
 
         {locationError && (
           <div className="caveat" style={{ marginBottom: 14 }}>
-            {locationError}{' '}
-            <span className="edit-link" onClick={retryLocation}>Retry</span>
+            {locationError} You can still save without location — it'll be flagged as missing location for review.{' '}
+            <span className="edit-link" onClick={retryLocation}>Retry location</span>
           </div>
         )}
 
         {requirePhoto && !photoFile && (
-          <p className="hint">A fresh photo with location is required to save — this is how updates get verified as taken on-site.</p>
+          <p className="hint">A fresh photo is required to save. Location is captured automatically if available — if it fails, you can still save, but it'll be flagged for review.</p>
         )}
 
         <div className="hint">

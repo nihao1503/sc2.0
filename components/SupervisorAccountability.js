@@ -25,7 +25,8 @@ export default function SupervisorAccountability({ activity }) {
   }
 
   const sorted = [...activity].sort((a, b) => {
-    // Overdue-and-quiet people float to the top
+    // Flagged and quiet people float to the top
+    if (a.flaggedCount !== b.flaggedCount) return b.flaggedCount - a.flaggedCount;
     if (a.updatedToday !== b.updatedToday) return a.updatedToday ? 1 : -1;
     return b.overdueCount - a.overdueCount;
   });
@@ -35,11 +36,11 @@ export default function SupervisorAccountability({ activity }) {
       <h3>Supervisor accountability</h3>
       <table className="reg">
         <thead>
-          <tr><th>Supervisor</th><th>Package / zones</th><th>Sites owned</th><th>Last activity</th><th>Today?</th><th>Overdue sites</th></tr>
+          <tr><th>Supervisor</th><th>Package / zones</th><th>Sites owned</th><th>Last activity</th><th>Today?</th><th>Overdue sites</th><th>Flagged updates</th></tr>
         </thead>
         <tbody>
           {sorted.map(a => (
-            <tr key={a.profile.id} className={a.updatedToday ? 'st-active' : 'st-halted'}>
+            <tr key={a.profile.id} className={a.flaggedCount > 0 ? 'st-halted' : (a.updatedToday ? 'st-active' : 'st-halted')}>
               <td className="site-name">{a.profile.name}</td>
               <td>{PACKAGE_LABEL[a.profile.package] || a.profile.package}
                 <div className="site-meta">Zones: {(a.profile.zones || []).join(', ') || '—'}</div>
@@ -54,12 +55,16 @@ export default function SupervisorAccountability({ activity }) {
               <td className="mono" style={{ color: a.overdueCount > 0 ? 'var(--amber)' : 'var(--ink-soft)' }}>
                 {a.overdueCount}
               </td>
+              <td className="mono" style={{ color: a.flaggedCount > 0 ? 'var(--amber)' : 'var(--ink-soft)', fontWeight: a.flaggedCount > 0 ? 700 : 400 }}>
+                {a.flaggedCount > 0 ? `⚠ ${a.flaggedCount}` : 0}
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
       <p className="small-note" style={{ marginTop: 10 }}>
         "Overdue" means a site marked Active, Halted, or never reported on hasn't been touched in 2+ days. Completed and Not-started sites aren't counted — they don't need daily updates.
+        "Flagged updates" counts sites where the photo's location didn't match the site (200m+ off) or no location was captured at all — only checked for the sites with known coordinates.
       </p>
     </div>
   );
