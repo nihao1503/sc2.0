@@ -58,6 +58,23 @@ export default function Dashboard() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  const isAdmin = profile?.role === 'admin';
+
+  const activity = useMemo(
+    () => isAdmin ? computeSupervisorActivity(supervisors, sites) : [],
+    [isAdmin, supervisors, sites]
+  );
+
+  const myLastActivity = useMemo(() => {
+    if (isAdmin) return null;
+    let latest = null;
+    sites.forEach(s => {
+      const ts = s.status?.updated_at;
+      if (ts && (!latest || new Date(ts) > new Date(latest))) latest = ts;
+    });
+    return latest;
+  }, [isAdmin, sites]);
+
   async function handleSave(siteId, { status, reason, note, updatedBy }) {
     const { error } = await supabase.from('site_status').upsert({
       site_id: siteId, status, reason, note, updated_by: updatedBy, updated_at: new Date().toISOString(),
@@ -83,23 +100,7 @@ export default function Dashboard() {
   if (loading) return <div className="wrap"><p>Loading…</p></div>;
   if (error) return <div className="wrap"><div className="caveat">{error}</div></div>;
 
-  const isAdmin = profile?.role === 'admin';
   const packages = isAdmin ? ['P2', 'P4'] : [profile?.package].filter(Boolean);
-
-  const activity = useMemo(
-    () => isAdmin ? computeSupervisorActivity(supervisors, sites) : [],
-    [isAdmin, supervisors, sites]
-  );
-
-  const myLastActivity = useMemo(() => {
-    if (isAdmin) return null;
-    let latest = null;
-    sites.forEach(s => {
-      const ts = s.status?.updated_at;
-      if (ts && (!latest || new Date(ts) > new Date(latest))) latest = ts;
-    });
-    return latest;
-  }, [isAdmin, sites]);
 
   return (
     <div>
