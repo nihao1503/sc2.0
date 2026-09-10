@@ -27,6 +27,7 @@ create table if not exists sites (
   category text,
   lat double precision,
   lng double precision,
+  in_current_scope boolean not null default false,
   created_at timestamptz default now()
 );
 
@@ -139,7 +140,7 @@ create policy "read site photos in scope" on storage.objects
     bucket_id = 'site-photos' and (
       is_admin() or exists (
         select 1 from sites
-        where sites.id = (storage.foldername(name))[1]
+        where sites.id = (storage.foldername(storage.objects.name))[1]
           and sites.package = my_package()
           and sites.zone = any(my_zones())
       )
@@ -151,7 +152,7 @@ create policy "upload site photos in scope" on storage.objects
     bucket_id = 'site-photos' and (
       is_admin() or exists (
         select 1 from sites
-        where sites.id = (storage.foldername(name))[1]
+        where sites.id = (storage.foldername(storage.objects.name))[1]
           and sites.package = my_package()
           and sites.zone = any(my_zones())
       )
