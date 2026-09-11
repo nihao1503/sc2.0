@@ -47,7 +47,7 @@ export default function SupervisorDetail() {
 
     const { data: siteRows, error: sitesErr } = await supabase
       .from('sites')
-      .select('*, site_status(status, reason, note, updated_by, updated_at, photo_path, photo_lat, photo_lng, photo_accuracy_m, photo_taken_at)')
+      .select('*, site_status(status, reason, note, updated_by, updated_at, photo_path, photo_lat, photo_lng, photo_accuracy_m, photo_taken_at), site_photos(id, photo_path, created_at)')
       .eq('in_current_scope', true)
       .order('zone', { ascending: true });
 

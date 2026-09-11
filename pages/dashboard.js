@@ -32,7 +32,7 @@ export default function Dashboard() {
 
     const { data: siteRows, error: sitesErr } = await supabase
       .from('sites')
-      .select('*, site_status(status, reason, note, updated_by, updated_at, photo_path, photo_lat, photo_lng, photo_accuracy_m, photo_taken_at)')
+      .select('*, site_status(status, reason, note, updated_by, updated_at, photo_path, photo_lat, photo_lng, photo_accuracy_m, photo_taken_at), site_photos(id, photo_path, created_at)')
       .eq('in_current_scope', true)
       .order('zone', { ascending: true });
 
@@ -76,7 +76,7 @@ export default function Dashboard() {
     return latest;
   }, [isAdmin, sites]);
 
-  async function handleSave(siteId, { status, reason, note, updatedBy, photoPath, photoLat, photoLng, photoAccuracyM, photoTakenAt }) {
+  async function handleSave(siteId, { status, reason, note, updatedBy, photoPath, photoLat, photoLng, photoAccuracyM, photoTakenAt, extraPhotoPaths }) {
     const nowIso = new Date().toISOString();
     const { error } = await supabase.from('site_status').upsert({
       site_id: siteId, status, reason, note, updated_by: updatedBy, updated_at: nowIso,
@@ -88,17 +88,36 @@ export default function Dashboard() {
       setTimeout(() => setToast(''), 3500);
       return;
     }
+
+    let newExtraPhotos = [];
+    if (extraPhotoPaths && extraPhotoPaths.length > 0) {
+      const rows = extraPhotoPaths.map(path => ({
+        site_id: siteId, photo_path: path, lat: photoLat, lng: photoLng,
+        accuracy_m: photoAccuracyM, taken_at: photoTakenAt, uploaded_by: updatedBy,
+      }));
+      const { data: inserted, error: extraErr } = await supabase.from('site_photos').insert(rows).select();
+      if (extraErr) {
+        setToast('Status saved, but extra photos failed to save: ' + extraErr.message);
+        setTimeout(() => setToast(''), 4000);
+      } else {
+        newExtraPhotos = inserted || [];
+      }
+    }
+
     setSites(prev => prev.map(s => s.id === siteId
       ? {
           ...s, status: {
             status, reason, note, updated_by: updatedBy, updated_at: nowIso,
             photo_path: photoPath, photo_lat: photoLat, photo_lng: photoLng,
             photo_accuracy_m: photoAccuracyM, photo_taken_at: photoTakenAt,
-          }
+          },
+          site_photos: [...(s.site_photos || []), ...newExtraPhotos],
         }
       : s));
-    setToast('Status saved');
-    setTimeout(() => setToast(''), 2500);
+    if (!error) {
+      setToast('Status saved');
+      setTimeout(() => setToast(''), 2500);
+    }
     setOpenSite(null);
   }
 

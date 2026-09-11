@@ -86,11 +86,11 @@ export default function PackageBoard({ pkg, sites, onOpenSite, showHeading = tru
 
   const maxReason = reasonCounts.length ? reasonCounts[0][1] : 1;
 
-  async function viewProof(e, st) {
+  async function viewProof(e, path) {
     e.stopPropagation();
-    if (!st.photo_path) return;
+    if (!path) return;
     try {
-      const url = await getSignedPhotoUrl(st.photo_path);
+      const url = await getSignedPhotoUrl(path);
       window.open(url, '_blank');
     } catch (err) {
       alert('Could not load photo: ' + (err.message || 'unknown error'));
@@ -194,8 +194,18 @@ export default function PackageBoard({ pkg, sites, onOpenSite, showHeading = tru
                       <td><span className="reason-txt">{reasonOrNote}</span></td>
                       <td>
                         {st.photo_path ? (
-                          <span className="edit-link" onClick={(e) => viewProof(e, st)}>📷 View</span>
+                          <span className="edit-link" onClick={(e) => viewProof(e, st.photo_path)}>📷 View</span>
                         ) : <span className="site-meta">none</span>}
+                        {(s.site_photos || []).length > 0 && (
+                          <div style={{ fontSize: 11, marginTop: 2 }}>
+                            {s.site_photos.map((p, i) => (
+                              <span key={p.id}>
+                                <span className="edit-link" onClick={(e) => viewProof(e, p.photo_path)}>+{i + 1}</span>
+                                {i < s.site_photos.length - 1 ? ' ' : ''}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                         {mismatch?.mismatch && (
                           <div style={{ color: 'var(--amber)', fontSize: 11, fontWeight: 600 }}>
                             ⚠ {Math.round(mismatch.distance)}m off

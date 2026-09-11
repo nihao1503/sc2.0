@@ -125,6 +125,46 @@ create policy "admin read all profiles" on profiles
   for select using (is_admin());
 
 -- ============================================================
+-- ============================================================
+-- Additional photos beyond the primary one (up to 4 more per update,
+-- 5 total). The primary photo stays on site_status for backward
+-- compatibility with the mismatch-flagging logic.
+-- ============================================================
+
+create table if not exists site_photos (
+  id bigint generated always as identity primary key,
+  site_id text references sites(id) on delete cascade,
+  photo_path text not null,
+  lat double precision,
+  lng double precision,
+  accuracy_m double precision,
+  taken_at timestamptz not null default now(),
+  uploaded_by text,
+  created_at timestamptz not null default now()
+);
+
+alter table site_photos enable row level security;
+
+create policy "read site photos rows in scope" on site_photos
+  for select using (
+    is_admin() or exists (
+      select 1 from sites
+      where sites.id = site_photos.site_id
+        and sites.package = my_package()
+        and sites.zone = any(my_zones())
+    )
+  );
+
+create policy "insert site photos rows in scope" on site_photos
+  for insert with check (
+    is_admin() or exists (
+      select 1 from sites
+      where sites.id = site_photos.site_id
+        and sites.package = my_package()
+        and sites.zone = any(my_zones())
+    )
+  );
+
 -- Photo proof storage — a private bucket holding the geotagged photo that
 -- must accompany every status update. Files are stored as
 -- "<site_id>/<filename>" so access can be scoped the same way as everything
