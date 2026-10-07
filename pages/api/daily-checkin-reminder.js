@@ -1,4 +1,4 @@
-import { Resend } from 'resend';
+import twilio from 'twilio';
 import { getSupabaseAdmin } from '../../lib/supabaseAdmin';
 
 function isToday(iso) {
@@ -88,7 +88,8 @@ export default async function handler(req, res) {
       status: Array.isArray(s.site_status) ? s.site_status[0] : s.site_status,
     }));
 
-    const resend = new Resend(process.env.RESEND_API_KEY);
+    const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+    const whatsappFrom = process.env.TWILIO_WHATSAPP_FROM; // e.g. 'whatsapp:+14155238886'
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://your-app.vercel.app';
 
     const results = [];
@@ -110,29 +111,23 @@ export default async function handler(req, res) {
         continue;
       }
 
-      // Look up their email via the auth admin API (profiles doesn't store email).
-      const { data: userData, error: userErr } = await supabase.auth.admin.getUserById(sup.id);
-      if (userErr || !userData?.user?.email) {
-        results.push({ supervisor: sup.name, skipped: true, reason: 'no email found' });
+      if (!sup.phone) {
+        results.push({ supervisor: sup.name, skipped: true, reason: 'no phone number on file' });
         continue;
       }
 
-      const email = userData.user.email;
       const zoneList = (sup.zones || []).join(', ') || 'your assigned zones';
 
-      await resend.emails.send({
-        from: process.env.REMINDER_FROM_EMAIL || 'Site Register <onboarding@resend.dev>',
-        to: email,
-        subject: "You haven't logged today's site update yet",
-        html: `
-          <p>Hi ${sup.name},</p>
-          <p>As of 11:00 AM, no update has been logged today for your assigned zones (${zoneList}) in the Site Register.</p>
-          <p>Please log in and update your sites as soon as you can:</p>
-          <p><a href="${appUrl}">${appUrl}</a></p>
-        `,
-      });
-
-      results.push({ supervisor: sup.name, email, sent: true });
+      try {
+        await twilioClient.messages.create({
+          from: whatsappFrom,
+          to: `whatsapp:${sup.phone}`,
+          body: `Hi ${sup.name}, as of 11:00 AM no update has been logged today for your assigned zones (${zoneList}) in the Site Register. Please log in and update your sites: ${appUrl}`,
+        });
+        results.push({ supervisor: sup.name, phone: sup.phone, sent: true });
+      } catch (sendErr) {
+        results.push({ supervisor: sup.name, phone: sup.phone, sent: false, error: sendErr.message });
+      }
     }
 
     return res.status(200).json({ ok: true, cleanup, results });

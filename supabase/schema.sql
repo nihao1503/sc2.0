@@ -12,6 +12,7 @@ create table if not exists profiles (
   role text not null check (role in ('supervisor', 'admin')),
   package text check (package in ('P2', 'P4')), -- null for admin (sees both)
   zones text[], -- which zones within that package this supervisor owns, e.g. ARRAY['1','2']. Null for admin.
+  phone text, -- WhatsApp number in E.164 format, e.g. +919876543210, for reminder messages
   created_at timestamptz default now()
 );
 
