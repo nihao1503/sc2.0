@@ -109,6 +109,60 @@ updated today sort to the top.
 Supervisors see a gentler version: a banner on their own dashboard if they
 haven't logged anything that day yet.
 
+## Photo proof with location
+
+Every status update requires at least one fresh photo, but a supervisor can
+add up to 5 if one angle isn't enough — the file picker stays available until
+they hit that limit. Location is captured once (from the first photo) and
+shared across the whole batch, since they're all taken during the same visit.
+
+**Photos are automatically deleted after 14 days** to keep storage from
+filling up — this runs as part of the daily cron job
+emails (see below), so no separate setup is needed. Deleting a photo clears
+the image itself and its location data, but leaves the status/reason/note
+history intact — only the picture goes away.
+
+Every status update now requires a fresh photo taken at the moment of saving,
+with the phone's GPS location captured alongside it — so an update can't be
+logged without actually visiting the site. This uses the phone's camera and
+location permissions (the browser will prompt for both the first time).
+
+For the 80 "New Construction" sites where you supplied real coordinates (from
+your Google My Maps exports), the app checks the photo's GPS against the
+site's registered location and flags anything more than 200m off — both to
+the supervisor before they save, and to your dad afterward, so a mismatch
+never blocks the update, just gets surfaced for a second look. Sites without
+known coordinates (everything else) just record and display the location —
+no automatic flagging, since there's nothing to check it against yet.
+
+**If your database is already live**, run these two migrations once in the
+Supabase SQL editor, in order:
+1. `supabase/migration_geotagged_photos.sql` — adds the photo/location columns
+   and creates the private storage bucket.
+2. `supabase/migration_geo_coordinates.sql` — adds the `lat`/`lng` columns and
+   loads the 80 New Construction coordinates (52 matched to existing sites,
+   28 added as new sites that weren't in the original extraction).
+
+**For a brand-new deployment**, `schema.sql` and `seed_sites.sql` already
+include the photo columns and storage bucket — just additionally run
+`supabase/seed_new_construction_coords.sql` after seeding to load the
+coordinates.
+
+## Daily cleanup job (reminders removed)
+
+The WhatsApp/Twilio check-in reminders were removed because they cost money.
+The daily cron (`vercel.json` -> `/api/daily-checkin-reminder`) now only
+deletes photos older than 14 days. It needs these Vercel env vars:
+`CRON_SECRET` and `SUPABASE_SERVICE_ROLE_KEY` (server-side only, never commit it).
+
+Test it: `curl -H "Authorization: Bearer YOUR_CRON_SECRET" https://sc2-0.vercel.app/api/daily-checkin-reminder`
+-> returns `{"ok":true,"cleanup":{...}}`.
+
+**To bring reminders back later:** `npm install twilio`, add a loop in the
+handler that finds supervisors with no update today (profiles.phone still
+exists) and sends via Twilio, and set TWILIO_* env vars. Business-initiated
+WhatsApp messages need an approved template and a paid Twilio account.
+
 ## Data note
 
 Package 2's 285 sites were extracted cleanly from the MIOP PDF. Package 4's

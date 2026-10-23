@@ -1,12 +1,6 @@
-import twilio from 'twilio';
+// Daily maintenance job (Vercel Cron). Currently only deletes photos older than
+// PHOTO_RETENTION_DAYS. WhatsApp reminders were removed (cost); see README.
 import { getSupabaseAdmin } from '../../lib/supabaseAdmin';
-
-function isToday(iso) {
-  if (!iso) return false;
-  const d = new Date(iso);
-  const now = new Date();
-  return d.toDateString() === now.toDateString();
-}
 
 const PHOTO_RETENTION_DAYS = 14;
 
@@ -71,68 +65,9 @@ export default async function handler(req, res) {
 
     const cleanup = await cleanupOldPhotos(supabase);
 
-    const { data: supervisors, error: supError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('role', 'supervisor');
-    if (supError) throw supError;
-
-    const { data: sites, error: sitesError } = await supabase
-      .from('sites')
-      .select('id, package, zone, site_status(updated_at)')
-      .eq('in_current_scope', true);
-    if (sitesError) throw sitesError;
-
-    const normalized = (sites || []).map(s => ({
-      ...s,
-      status: Array.isArray(s.site_status) ? s.site_status[0] : s.site_status,
-    }));
-
-    const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-    const whatsappFrom = process.env.TWILIO_WHATSAPP_FROM; // e.g. 'whatsapp:+14155238886'
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://your-app.vercel.app';
-
-    const results = [];
-
-    for (const sup of supervisors || []) {
-      const theirSites = normalized.filter(s =>
-        s.package === sup.package && (sup.zones || []).includes(s.zone)
-      );
-      if (theirSites.length === 0) continue;
-
-      let lastActivity = null;
-      theirSites.forEach(s => {
-        const ts = s.status?.updated_at;
-        if (ts && (!lastActivity || new Date(ts) > new Date(lastActivity))) lastActivity = ts;
-      });
-
-      if (isToday(lastActivity)) {
-        results.push({ supervisor: sup.name, skipped: true, reason: 'already updated today' });
-        continue;
-      }
-
-      if (!sup.phone) {
-        results.push({ supervisor: sup.name, skipped: true, reason: 'no phone number on file' });
-        continue;
-      }
-
-      const zoneList = (sup.zones || []).join(', ') || 'your assigned zones';
-
-      try {
-        await twilioClient.messages.create({
-          from: whatsappFrom,
-          to: `whatsapp:${sup.phone}`,
-          body: `Hi ${sup.name}, as of 11:00 AM no update has been logged today for your assigned zones (${zoneList}) in the Site Register. Please log in and update your sites: ${appUrl}`,
-        });
-        results.push({ supervisor: sup.name, phone: sup.phone, sent: true });
-      } catch (sendErr) {
-        results.push({ supervisor: sup.name, phone: sup.phone, sent: false, error: sendErr.message });
-      }
-    }
-
-    return res.status(200).json({ ok: true, cleanup, results });
+    return res.status(200).json({ ok: true, cleanup });
   } catch (err) {
-    console.error('daily-checkin-reminder failed', err);
+    console.error('photo cleanup cron failed', err);
     return res.status(500).json({ error: err.message || 'unknown error' });
   }
 }
